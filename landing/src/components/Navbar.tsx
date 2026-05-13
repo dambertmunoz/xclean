@@ -1,12 +1,12 @@
 import Link from "next/link";
+import Logo from "./Logo";
 
 export default function Navbar() {
   return (
     <header className="sticky top-0 z-30 border-b border-neutral-900/70 bg-neutral-950/70 backdrop-blur">
       <div className="container-narrow flex h-14 items-center justify-between">
-        <Link href="/" className="flex items-center gap-2 text-sm font-semibold">
-          <span className="inline-block h-2 w-2 rounded-full bg-emerald-500" />
-          <span>xclean</span>
+        <Link href="/" className="text-sm" aria-label="xclean — recuperá tu Mac">
+          <Logo size={24} />
         </Link>
         <nav className="flex items-center gap-2 text-sm">
           <Link href="#features" className="hidden text-neutral-400 hover:text-neutral-100 sm:inline px-3 py-1.5">
