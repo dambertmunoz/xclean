@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { queries, type SubmissionStatus } from "@/lib/db";
+import { queries, type SubmissionStatus } from "@/lib/db-pg";
 
 const TABS: { value: SubmissionStatus | "all"; label: string }[] = [
   { value: "pending", label: "Pendientes" },
@@ -11,8 +11,10 @@ const TABS: { value: SubmissionStatus | "all"; label: string }[] = [
 export default async function Page({ searchParams }: { searchParams: Promise<{ tab?: string }> }) {
   const { tab } = await searchParams;
   const active = (TABS.find((t) => t.value === tab)?.value ?? "pending") as SubmissionStatus | "all";
-  const list = queries.list(active);
-  const counts = queries.countByStatus();
+  const [list, counts] = await Promise.all([
+    queries.listSubmissions(active),
+    queries.countByStatus(),
+  ]);
 
   return (
     <div className="space-y-6">

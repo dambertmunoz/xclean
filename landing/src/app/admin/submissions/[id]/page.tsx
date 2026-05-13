@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { queries } from "@/lib/db";
+import { queries } from "@/lib/db-pg";
 import DecisionPanel from "./DecisionPanel";
 
 export default async function Page({ params }: { params: Promise<{ id: string }> }) {
@@ -8,7 +8,7 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
   const submissionId = Number(id);
   if (!Number.isFinite(submissionId)) notFound();
 
-  const submission = queries.get(submissionId);
+  const submission = await queries.getSubmission(submissionId);
   if (!submission) notFound();
 
   return (
