@@ -1,0 +1,83 @@
+@import "tailwindcss";
+
+@theme {
+  --color-bg:        #0a0a0a;
+  --color-bg-soft:   #111111;
+  --color-bg-card:   #161616;
+  --color-border:    #232323;
+  --color-fg:        #fafafa;
+  --color-fg-muted:  #a3a3a3;
+  --color-fg-dim:    #6b6b6b;
+  --color-accent:    #10b981;          /* emerald */
+  --color-accent-2:  #34d399;
+  --color-danger:    #ef4444;
+  --color-warning:   #f59e0b;
+
+  --radius-card: 16px;
+  --radius-btn:  10px;
+
+  --font-sans:  ui-sans-serif, -apple-system, BlinkMacSystemFont, "Inter", "Helvetica Neue", system-ui, sans-serif;
+  --font-mono:  ui-monospace, SFMono-Regular, "JetBrains Mono", Menlo, monospace;
+}
+
+@layer base {
+  :root {
+    color-scheme: dark;
+  }
+  html, body {
+    background-color: var(--color-bg);
+    color: var(--color-fg);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+  body {
+    background-image:
+      radial-gradient(1200px 600px at 50% -10%, rgba(16,185,129,0.10), transparent 60%),
+      radial-gradient(800px 400px at 90% 110%, rgba(52,211,153,0.06), transparent 60%);
+    background-attachment: fixed;
+  }
+  ::selection { background: var(--color-accent); color: var(--color-bg); }
+}
+
+@layer components {
+  .container-narrow {
+    @apply mx-auto w-full max-w-5xl px-6;
+  }
+
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2 rounded-[10px]
+           bg-emerald-500 px-5 py-3 text-sm font-semibold text-black
+           transition hover:bg-emerald-400 active:bg-emerald-600;
+  }
+
+  .btn-ghost {
+    @apply inline-flex items-center justify-center gap-2 rounded-[10px]
+           border border-neutral-800 bg-neutral-900 px-5 py-3 text-sm
+           font-medium text-neutral-200 transition hover:border-neutral-700
+           hover:bg-neutral-800;
+  }
+
+  .card {
+    @apply rounded-2xl border border-neutral-800 bg-neutral-900/60
+           backdrop-blur-sm;
+  }
+
+  .input {
+    @apply w-full rounded-[10px] border border-neutral-800 bg-neutral-950
+           px-4 py-3 text-sm text-neutral-100 placeholder:text-neutral-600
+           outline-none transition focus:border-emerald-500/60
+           focus:ring-2 focus:ring-emerald-500/20;
+  }
+
+  .label {
+    @apply mb-2 block text-xs font-medium uppercase tracking-wider text-neutral-400;
+  }
+}
+
+/* tiny fade-in for first paint */
+@keyframes rise {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.animate-rise { animation: rise 0.45s ease-out both; }
