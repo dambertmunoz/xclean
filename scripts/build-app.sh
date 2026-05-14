@@ -30,12 +30,23 @@ if [[ ! -x "$BINARY" ]]; then
     exit 1
 fi
 
+# Regenerate icons if missing or out-of-date. Cheap: skipped if cached.
+if [[ ! -f "$ROOT/build/icons/xclean.icns" ]] || \
+   [[ "$ROOT/assets/logo.svg" -nt "$ROOT/build/icons/xclean.icns" ]] || \
+   [[ "$ROOT/assets/menubar-icon.svg" -nt "$ROOT/build/icons/menubar.png" ]]; then
+    echo "→ regenerating icons"
+    "$ROOT/scripts/make-icons.sh" >/dev/null
+fi
+
 echo "→ assembling $APP_DIR"
 rm -rf "$APP_DIR"
 mkdir -p "$APP_DIR/Contents/MacOS"
 mkdir -p "$APP_DIR/Contents/Resources"
 
 cp "$BINARY" "$APP_DIR/Contents/MacOS/xclean"
+cp "$ROOT/build/icons/xclean.icns"   "$APP_DIR/Contents/Resources/xclean.icns"
+cp "$ROOT/build/icons/menubar.png"   "$APP_DIR/Contents/Resources/menubar.png"
+cp "$ROOT/build/icons/menubar@2x.png" "$APP_DIR/Contents/Resources/menubar@2x.png"
 
 cat > "$APP_DIR/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
@@ -56,6 +67,10 @@ cat > "$APP_DIR/Contents/Info.plist" <<PLIST
     <string>xclean</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
+    <key>CFBundleIconFile</key>
+    <string>xclean</string>
+    <key>CFBundleIconName</key>
+    <string>xclean</string>
     <key>CFBundleShortVersionString</key>
     <string>${VERSION}</string>
     <key>CFBundleVersion</key>

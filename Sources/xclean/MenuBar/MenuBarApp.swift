@@ -55,11 +55,24 @@ final class MenuBarAppDelegate: NSObject, NSApplicationDelegate {
         systemEvents.start()
     }
 
+    /// Prefer the bundled xclean glyph (`Resources/menubar.png` /
+    /// `menubar@2x.png`) so the status bar matches the web brand. Falls
+    /// back to the SF Symbol when running the SPM binary directly
+    /// (no .app bundle, no Resources dir).
+    private static func loadStatusItemImage() -> NSImage? {
+        if let url = Bundle.main.url(forResource: "menubar", withExtension: "png"),
+           let img = NSImage(contentsOf: url) {
+            img.size = NSSize(width: 18, height: 18)
+            return img
+        }
+        return NSImage(systemSymbolName: "internaldrive", accessibilityDescription: "xclean")
+    }
+
     private func configureStatusItem() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         guard let button = statusItem.button else { return }
 
-        if let image = NSImage(systemSymbolName: "internaldrive", accessibilityDescription: "xclean") {
+        if let image = Self.loadStatusItemImage() {
             image.isTemplate = true
             button.image = image
         } else {
