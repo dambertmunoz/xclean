@@ -14,8 +14,8 @@ struct XClean: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "xclean",
         abstract: "Smart disk-space reclaimer for Xcode, Simulators, CocoaPods, SPM and Carthage.",
-        version: "0.2.0",
-        subcommands: [Scan.self, Clean.self, Doctor.self, Stats.self, Inspect.self, Menu.self, Reclaim.self],
+        version: "0.3.0",
+        subcommands: [Scan.self, Clean.self, Doctor.self, Stats.self, Inspect.self, Menu.self, Reclaim.self, License.self],
         defaultSubcommand: defaultSub
     )
 }
@@ -51,6 +51,7 @@ struct Clean: ParsableCommand {
     var yes: Bool = false
 
     mutating func run() throws {
+        try LicenseGate.requireActiveLicense()
         let mode: Mode = yes ? .yes : .interactive
         let config = try shared.makeConfig(mode: mode)
         let engine = CleanEngine(config: config)
@@ -360,6 +361,9 @@ struct Reclaim: ParsableCommand {
             FileHandle.standardError.write("xclean reclaim: refusing to run without --yes\n".data(using: .utf8)!)
             throw ExitCode(2)
         }
+        if !dryRun {
+            try LicenseGate.requireActiveLicense()
+        }
 
         let store = IndexStore()
         let scanner = CachedInspectorScanner(store: store)
@@ -421,5 +425,166 @@ struct Reclaim: ParsableCommand {
             }
             throw ExitCode(1)
         }
+    }
+}
+
+// MARK: - license
+
+enum LicenseGate {
+    /// Gate for destructive operations. Uses the cached license state to
+    /// avoid hitting the network on every invocation; the menu app's
+    /// daily heartbeat keeps the cache fresh, and `.grace` allows up to
+    /// seven days of offline use after the last successful validate.
+    static func requireActiveLicense() throws {
+        switch LicenseManager.shared.currentState() {
+        case .active, .grace:
+            return
+        case .unactivated:
+            FileHandle.standardError.write("""
+                ✗ This operation requires an active xclean license.
+                  · activate:    xclean license activate <KEY>
+                  · buy a key:   https://xclean-seven.vercel.app/comprar
+
+                """.data(using: .utf8)!)
+            throw ExitCode(64)
+        case .invalid(let reason):
+            FileHandle.standardError.write("""
+                ✗ Your xclean license is invalid (\(reason)).
+                  · re-activate: xclean license activate <KEY>
+
+                """.data(using: .utf8)!)
+            throw ExitCode(64)
+        }
+    }
+}
+
+struct License: ParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "license",
+        abstract: "Activate, inspect, or release the xclean license on this Mac.",
+        subcommands: [LicenseActivate.self, LicenseStatus.self, LicenseDeactivate.self],
+        defaultSubcommand: LicenseStatus.self
+    )
+}
+
+/// Bridge an async closure to a sync caller. Required because the top-level
+/// `XClean` is `ParsableCommand` (sync) so that `Menu` can call `NSApp.run()`
+/// on the main thread — AsyncParsableCommand schedules subcommands on a
+/// non-main executor and AppKit traps when entered off the main thread.
+private func runBlocking<T>(_ op: @escaping () async throws -> T) throws -> T {
+    let sem = DispatchSemaphore(value: 0)
+    var captured: Result<T, Error>!
+    Task.detached {
+        do {
+            let v = try await op()
+            captured = .success(v)
+        } catch {
+            captured = .failure(error)
+        }
+        sem.signal()
+    }
+    sem.wait()
+    return try captured.get()
+}
+
+struct LicenseActivate: ParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "activate",
+        abstract: "Bind this Mac to a license key. One Mac per key."
+    )
+
+    @Argument(help: "License key (XCL-XXXX-XXXX-XXXX-XXXX).")
+    var key: String
+
+    @Option(name: .long, help: "Friendly label for this machine (default: hostname).")
+    var label: String?
+
+    mutating func run() throws {
+        do {
+            let theKey = key
+            let theLabel = label
+            let state = try runBlocking {
+                try await LicenseManager.shared.activate(key: theKey, machineLabel: theLabel)
+            }
+            print("✓ license activated on this machine.")
+            LicenseStatePrinter.print(state)
+        } catch let e as LicenseManager.LicenseError {
+            FileHandle.standardError.write("✗ \(e.errorDescription ?? "activation failed")\n".data(using: .utf8)!)
+            throw ExitCode(1)
+        }
+    }
+}
+
+struct LicenseStatus: ParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "status",
+        abstract: "Show the current license state."
+    )
+
+    @Flag(name: .long, help: "Hit the server to refresh; default reads local cache.")
+    var refresh: Bool = false
+
+    mutating func run() throws {
+        var state = LicenseManager.shared.currentState()
+        if refresh && LicenseManager.shared.storedLicenseKey() != nil {
+            if let fresh = try? runBlocking({ try await LicenseManager.shared.validate() }) {
+                state = fresh
+            }
+        }
+        LicenseStatePrinter.print(state)
+    }
+}
+
+struct LicenseDeactivate: ParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "deactivate",
+        abstract: "Release this Mac's slot so the key can be re-activated elsewhere."
+    )
+
+    @Flag(name: .shortAndLong, help: "Skip the confirmation prompt.")
+    var yes: Bool = false
+
+    mutating func run() throws {
+        if !yes {
+            print("Re-activations are capped at 2 per rolling 30 days. Continue? [y/N] ", terminator: "")
+            let ans = readLine() ?? ""
+            guard ans.lowercased().hasPrefix("y") else {
+                print("aborted.")
+                return
+            }
+        }
+        do {
+            try runBlocking { try await LicenseManager.shared.deactivate() }
+            print("✓ this Mac is no longer activated. The license can be used on another machine.")
+        } catch let e as LicenseManager.LicenseError {
+            FileHandle.standardError.write("✗ \(e.errorDescription ?? "deactivate failed")\n".data(using: .utf8)!)
+            throw ExitCode(1)
+        }
+    }
+}
+
+enum LicenseStatePrinter {
+    static func print(_ state: LicenseManager.State) {
+        switch state {
+        case .unactivated:
+            Swift.print("● not activated — run: xclean license activate <KEY>")
+        case .active(let expiresAt):
+            let days = max(0, Int(expiresAt.timeIntervalSinceNow / 86_400))
+            Swift.print("● active — expires \(format(expiresAt)) (in \(days) days)")
+        case .grace(let expiresAt, let deadline):
+            let daysToExp = max(0, Int(expiresAt.timeIntervalSinceNow / 86_400))
+            let daysToDeadline = max(0, Int(deadline.timeIntervalSinceNow / 86_400))
+            Swift.print("⚠ offline grace — \(daysToDeadline) days left before forced re-validation")
+            Swift.print("  license expires in \(daysToExp) days (\(format(expiresAt)))")
+        case .invalid(let reason):
+            Swift.print("✗ invalid — \(reason). Re-activate with: xclean license activate <KEY>")
+        }
+    }
+
+    private static func format(_ d: Date) -> String {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.dateFormat = "yyyy-MM-dd"
+        return f.string(from: d)
     }
 }

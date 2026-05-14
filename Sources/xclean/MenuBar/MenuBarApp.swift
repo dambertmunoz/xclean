@@ -133,7 +133,9 @@ final class MenuBarAppDelegate: NSObject, NSApplicationDelegate {
             onScanProjects: { [weak self] in self?.scanProjects() },
             onClearProjects: { [weak self] in self?.clearProjects() },
             onToggleAutoReclaim: { [weak self] in self?.toggleAutoReclaim() },
-            onGrantFDA: { [weak self] in self?.grantFullDiskAccess() }
+            onGrantFDA: { [weak self] in self?.grantFullDiskAccess() },
+            onEnterLicense: { [weak self] in self?.openLicenseKeyEntry() },
+            onDeactivateLicense: { [weak self] in self?.deactivateLicense() }
         )
         let menu = menuBuilder.build(inputs, callbacks: callbacks)
         menu.delegate = self
@@ -332,6 +334,148 @@ final class MenuBarAppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    // MARK: - license
+
+    /// Hard gate for destructive operations from the menu bar. Returns true
+    /// if the user may proceed; false (and shows an alert with a path
+    /// forward) otherwise. Reads cached license state — no network call,
+    /// so it's safe to call at the start of every destructive handler.
+    @discardableResult
+    private func ensureLicensedOperation() -> Bool {
+        if ProcessInfo.processInfo.environment["XCLEAN_LICENSE_SKIP_GATE"] != nil {
+            return true
+        }
+        switch LicenseManager.shared.currentState() {
+        case .active, .grace:
+            return true
+        case .unactivated, .invalid:
+            promptForLicenseActivation()
+            return false
+        }
+    }
+
+    private func promptForLicenseActivation() {
+        activateForModal()
+        let alert = NSAlert()
+        if case .invalid(let reason) = LicenseManager.shared.currentState() {
+            alert.messageText = "License invalid (\(reason))"
+            alert.informativeText = "Re-enter your license key or get a new one to continue using destructive operations."
+        } else {
+            alert.messageText = "Activate xclean to free space"
+            alert.informativeText = "Destructive operations are gated to license holders. Activate this Mac with your key, or grab one for $10/year."
+        }
+        alert.alertStyle = .warning
+        alert.addButton(withTitle: "Enter license key…")
+        alert.addButton(withTitle: "Buy a key")
+        alert.addButton(withTitle: "Cancel")
+        switch alert.runModal() {
+        case .alertFirstButtonReturn:
+            openLicenseKeyEntry()
+        case .alertSecondButtonReturn:
+            if let url = URL(string: "https://xclean-seven.vercel.app/comprar") {
+                NSWorkspace.shared.open(url)
+            }
+        default:
+            break
+        }
+    }
+
+    private func openLicenseKeyEntry() {
+        activateForModal()
+        let alert = NSAlert()
+        alert.messageText = "Activate xclean"
+        alert.informativeText = "Paste your license key. One Mac per key."
+        alert.alertStyle = .informational
+        let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 320, height: 22))
+        field.placeholderString = "XCL-AAAA-BBBB-CCCC-DDDD"
+        alert.accessoryView = field
+        alert.addButton(withTitle: "Activate")
+        alert.addButton(withTitle: "Cancel")
+        field.becomeFirstResponder()
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        let key = field.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        Task { [weak self] in
+            do {
+                let state = try await LicenseManager.shared.activate(key: key)
+                await MainActor.run { [weak self] in
+                    self?.showLicenseResult(state: state, error: nil)
+                }
+            } catch let e as LicenseManager.LicenseError {
+                await MainActor.run { [weak self] in
+                    self?.showLicenseResult(state: .unactivated, error: e.errorDescription ?? "activation failed")
+                }
+            } catch {
+                await MainActor.run { [weak self] in
+                    self?.showLicenseResult(state: .unactivated, error: error.localizedDescription)
+                }
+            }
+        }
+    }
+
+    private func showLicenseResult(state: LicenseManager.State, error: String?) {
+        activateForModal()
+        let alert = NSAlert()
+        if let err = error {
+            alert.messageText = "Activation failed"
+            alert.informativeText = err
+            alert.alertStyle = .critical
+        } else if case .active(let exp) = state {
+            let days = max(0, Int(exp.timeIntervalSinceNow / 86_400))
+            alert.messageText = "Activated ✓"
+            alert.informativeText = "Valid for \(days) more days."
+            alert.alertStyle = .informational
+        } else {
+            alert.messageText = "Activation completed"
+            alert.alertStyle = .informational
+        }
+        alert.addButton(withTitle: "OK")
+        _ = alert.runModal()
+        rebuildMenu()
+    }
+
+    private func deactivateLicense() {
+        let state = LicenseManager.shared.currentState()
+        let isActive: Bool
+        switch state {
+        case .active, .grace: isActive = true
+        default: isActive = false
+        }
+        guard isActive else { return }
+        activateForModal()
+        let alert = NSAlert()
+        alert.messageText = "Release this Mac from the license?"
+        alert.informativeText = "After deactivation you can activate this key on another machine. Re-activations are limited to 2 per rolling 30 days."
+        alert.alertStyle = .warning
+        alert.addButton(withTitle: "Deactivate")
+        alert.addButton(withTitle: "Cancel")
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        Task { [weak self] in
+            do {
+                try await LicenseManager.shared.deactivate()
+                await MainActor.run { [weak self] in
+                    self?.activateForModal()
+                    let done = NSAlert()
+                    done.messageText = "Deactivated ✓"
+                    done.informativeText = "This Mac no longer holds the activation slot."
+                    done.alertStyle = .informational
+                    done.addButton(withTitle: "OK")
+                    _ = done.runModal()
+                    self?.rebuildMenu()
+                }
+            } catch {
+                await MainActor.run { [weak self] in
+                    self?.activateForModal()
+                    let err = NSAlert()
+                    err.messageText = "Deactivation failed"
+                    err.informativeText = error.localizedDescription
+                    err.alertStyle = .critical
+                    err.addButton(withTitle: "OK")
+                    _ = err.runModal()
+                }
+            }
+        }
+    }
+
     // MARK: - auto-reclaim
 
     private func toggleAutoReclaim() {
@@ -355,6 +499,7 @@ final class MenuBarAppDelegate: NSObject, NSApplicationDelegate {
     // MARK: - single-entry cleanup
 
     private func confirmCleanup(finding: InspectFinding, command: String) {
+        guard ensureLicensedOperation() else { return }
         activateForModal()
         let alert = NSAlert()
         alert.messageText = "Free \(ByteSize.human(finding.sizeBytes))?"
@@ -385,6 +530,7 @@ final class MenuBarAppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func confirmTrash(_ finding: InspectFinding) {
+        guard ensureLicensedOperation() else { return }
         activateForModal()
         let alert = NSAlert()
         alert.messageText = "Move \(ByteSize.human(finding.sizeBytes)) to Trash?"
@@ -414,6 +560,7 @@ final class MenuBarAppDelegate: NSObject, NSApplicationDelegate {
     // MARK: - bulk cleanup
 
     private func confirmAndRunBulk() {
+        guard ensureLicensedOperation() else { return }
         let candidates = latestFindings.filter { $0.entry.cleanup != nil }
         let total = candidates.reduce(UInt64(0)) { $0 + $1.sizeBytes }
 

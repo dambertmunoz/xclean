@@ -18,7 +18,7 @@ BUILD_DIR="$ROOT/build"
 APP_DIR="$BUILD_DIR/xclean.app"
 DEST="${1:-/Applications}"
 
-VERSION="0.2.0"
+VERSION="0.3.0"
 BUNDLE_ID="com.dambert.xclean"
 
 echo "→ building release binary"

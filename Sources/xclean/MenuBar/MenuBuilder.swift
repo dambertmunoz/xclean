@@ -42,6 +42,8 @@ final class MenuBuilder: NSObject {
         let onClearProjects: () -> Void
         let onToggleAutoReclaim: () -> Void
         let onGrantFDA: () -> Void
+        let onEnterLicense: () -> Void
+        let onDeactivateLicense: () -> Void
     }
 
     // MARK: - state (re-captured on every build)
@@ -505,7 +507,56 @@ final class MenuBuilder: NSObject {
             : "Required to Move sandboxed folders (Docker, etc.) to Trash."
         menu.addItem(fda)
 
+        menu.addItem(.separator())
+        appendLicenseItems(to: menu)
+
         return menu
+    }
+
+    private func appendLicenseItems(to menu: NSMenu) {
+        let state = LicenseManager.shared.currentState()
+        switch state {
+        case .active(let exp):
+            let days = max(0, Int(exp.timeIntervalSinceNow / 86_400))
+            let header = NSMenuItem(title: "License: active · \(days) days left", action: nil, keyEquivalent: "")
+            header.isEnabled = false
+            menu.addItem(header)
+            let off = NSMenuItem(title: "Deactivate this Mac…",
+                                 action: #selector(handleDeactivateLicense(_:)),
+                                 keyEquivalent: "")
+            off.target = self
+            menu.addItem(off)
+        case .grace(_, let deadline):
+            let daysToDeadline = max(0, Int(deadline.timeIntervalSinceNow / 86_400))
+            let header = NSMenuItem(title: "License: offline grace · \(daysToDeadline)d to revalidate",
+                                    action: nil, keyEquivalent: "")
+            header.isEnabled = false
+            menu.addItem(header)
+            let off = NSMenuItem(title: "Deactivate this Mac…",
+                                 action: #selector(handleDeactivateLicense(_:)),
+                                 keyEquivalent: "")
+            off.target = self
+            menu.addItem(off)
+        case .unactivated:
+            let header = NSMenuItem(title: "License: not activated", action: nil, keyEquivalent: "")
+            header.isEnabled = false
+            menu.addItem(header)
+            let enter = NSMenuItem(title: "Enter license key…",
+                                   action: #selector(handleEnterLicense(_:)),
+                                   keyEquivalent: "")
+            enter.target = self
+            menu.addItem(enter)
+        case .invalid(let reason):
+            let header = NSMenuItem(title: "License: invalid (\(reason))",
+                                    action: nil, keyEquivalent: "")
+            header.isEnabled = false
+            menu.addItem(header)
+            let enter = NSMenuItem(title: "Re-enter license key…",
+                                   action: #selector(handleEnterLicense(_:)),
+                                   keyEquivalent: "")
+            enter.target = self
+            menu.addItem(enter)
+        }
     }
 
     /// Captured at build time so the checkmark reflects the live state.
@@ -550,6 +601,8 @@ final class MenuBuilder: NSObject {
     @objc private func handleClearProjects(_ sender: NSMenuItem) { callbacks?.onClearProjects() }
     @objc private func handleToggleAutoReclaim(_ sender: NSMenuItem) { callbacks?.onToggleAutoReclaim() }
     @objc private func handleGrantFDA(_ sender: NSMenuItem) { callbacks?.onGrantFDA() }
+    @objc private func handleEnterLicense(_ sender: NSMenuItem) { callbacks?.onEnterLicense() }
+    @objc private func handleDeactivateLicense(_ sender: NSMenuItem) { callbacks?.onDeactivateLicense() }
 
     // MARK: - small helpers
 
