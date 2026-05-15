@@ -288,12 +288,24 @@ enum InspectorRegistry {
                      note: "downloaded tvOS symbols — re-fetched on next connect",
                      cleanup: "rm -rf \"$HOME/Library/Developer/Xcode/tvOS DeviceSupport\"/* 2>/dev/null || true"),
 
-        InspectEntry(label: "iOS Simulators",
+        // Two complementary entries: one safe (only deletes simulators whose
+        // runtime is gone — usually a fraction of the total), one aggressive
+        // (wipes all simulator data, keeping definitions). The path is the
+        // same in both because that's what's being measured; the labels and
+        // notes make the actual freed amount honest.
+        InspectEntry(label: "iOS Simulators — outdated runtimes only",
                      path: p("Library/Developer/CoreSimulator/Devices"),
                      category: .appleDev,
-                     note: "simulator filesystems + app data — `xcrun simctl delete unavailable` clears outdated runtimes only",
+                     note: "Deletes simulators whose iOS/tvOS/watchOS runtime is gone. Frees 0 GB if all current runtimes are installed.",
                      cleanup: "xcrun simctl delete unavailable",
                      safetyOverride: .data),
+
+        InspectEntry(label: "iOS Simulators — erase all data",
+                     path: p("Library/Developer/CoreSimulator/Devices"),
+                     category: .appleDev,
+                     note: "Shuts down and erases data of every simulator. Definitions are kept; first launch starts clean. Frees the bulk of the listed size.",
+                     cleanup: "xcrun simctl shutdown all 2>/dev/null; xcrun simctl erase all",
+                     safetyOverride: .installation),
 
         InspectEntry(label: "CoreSimulator Caches",
                      path: p("Library/Developer/CoreSimulator/Caches"),
