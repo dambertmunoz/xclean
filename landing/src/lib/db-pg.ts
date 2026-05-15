@@ -57,7 +57,7 @@ export const queries = {
     proofPath: string;
   }): Promise<Submission> {
     const { data, error } = await getClient()
-      .from("submissions")
+      .from("xclean_submissions")
       .insert({
         email: args.email,
         name: args.name,
@@ -73,7 +73,7 @@ export const queries = {
     filter?: SubmissionStatus | "all",
   ): Promise<Submission[]> {
     const q = getClient()
-      .from("submissions")
+      .from("xclean_submissions")
       .select("*")
       .order("created_at", { ascending: false });
     const { data, error } =
@@ -84,7 +84,7 @@ export const queries = {
 
   async getSubmission(id: number): Promise<Submission | undefined> {
     const { data, error } = await getClient()
-      .from("submissions")
+      .from("xclean_submissions")
       .select("*")
       .eq("id", id)
       .maybeSingle();
@@ -104,7 +104,7 @@ export const queries = {
     };
     if (notes != null) patch.notes = notes;
     const { data, error } = await getClient()
-      .from("submissions")
+      .from("xclean_submissions")
       .update(patch)
       .eq("id", id)
       .neq("status", "approved")
@@ -124,7 +124,7 @@ export const queries = {
     };
     if (notes != null) patch.notes = notes;
     const { data, error } = await getClient()
-      .from("submissions")
+      .from("xclean_submissions")
       .update(patch)
       .eq("id", id)
       .eq("status", "pending")
@@ -143,7 +143,7 @@ export const queries = {
     const client = getClient();
     for (const s of ["pending", "approved", "rejected"] as SubmissionStatus[]) {
       const { count, error } = await client
-        .from("submissions")
+        .from("xclean_submissions")
         .select("*", { count: "exact", head: true })
         .eq("status", s);
       if (error) throw error;
@@ -159,7 +159,7 @@ export const queries = {
     expiresAt: Date;
   }): Promise<License> {
     const { data, error } = await getClient()
-      .from("licenses")
+      .from("xclean_licenses")
       .upsert(
         {
           key: args.key,
@@ -177,7 +177,7 @@ export const queries = {
 
   async getLicense(key: string): Promise<License | undefined> {
     const { data, error } = await getClient()
-      .from("licenses")
+      .from("xclean_licenses")
       .select("*")
       .eq("key", key)
       .maybeSingle();
@@ -189,7 +189,7 @@ export const queries = {
     licenseKey: string,
   ): Promise<Activation | undefined> {
     const { data, error } = await getClient()
-      .from("activations")
+      .from("xclean_activations")
       .select("*")
       .eq("license_key", licenseKey)
       .is("deactivated_at", null)
@@ -205,7 +205,7 @@ export const queries = {
   ): Promise<number> {
     const since = new Date(Date.now() - sinceDays * 86_400_000).toISOString();
     const { count, error } = await getClient()
-      .from("activations")
+      .from("xclean_activations")
       .select("*", { count: "exact", head: true })
       .eq("license_key", licenseKey)
       .not("deactivated_at", "is", null)
@@ -220,7 +220,7 @@ export const queries = {
     machineLabel: string | null;
   }): Promise<Activation> {
     const { data, error } = await getClient()
-      .from("activations")
+      .from("xclean_activations")
       .insert({
         license_key: args.licenseKey,
         machine_id: args.machineId,
@@ -237,7 +237,7 @@ export const queries = {
     machineId: string,
   ): Promise<Activation | undefined> {
     const { data, error } = await getClient()
-      .from("activations")
+      .from("xclean_activations")
       .update({ last_seen_at: new Date().toISOString() })
       .eq("license_key", licenseKey)
       .eq("machine_id", machineId)
@@ -253,7 +253,7 @@ export const queries = {
     machineId: string,
   ): Promise<Activation | undefined> {
     const { data, error } = await getClient()
-      .from("activations")
+      .from("xclean_activations")
       .update({ deactivated_at: new Date().toISOString() })
       .eq("license_key", licenseKey)
       .eq("machine_id", machineId)
