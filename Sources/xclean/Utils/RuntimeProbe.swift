@@ -39,4 +39,37 @@ enum RuntimeProbe {
         Darwin.close(fd)
         return true
     }
+
+    /// True when this process can enumerate a third-party container without
+    /// hitting the macOS Sonoma+ "App Management" TCC prompt. The check
+    /// reads the contents of `~/Library/Containers/<probe>/Data` — if at
+    /// least one of the probed Apple-vended containers returns its child
+    /// list, the App Management permission is in effect (or FDA covers it).
+    ///
+    /// Both FDA and the dedicated App Management toggle satisfy this probe
+    /// because both grant access to the same `kTCCServiceSystemPolicyAppData`
+    /// surface. The probe is read-only — listing a directory does not
+    /// raise the system prompt; only WRITE operations would.
+    static func hasAppManagementAccess() -> Bool {
+        // FDA implies App Management — fast path.
+        if hasFullDiskAccess() { return true }
+        let fm = FileManager.default
+        let containers = NSHomeDirectory() + "/Library/Containers"
+        // Pick a small set of containers we expect to exist on most Macs.
+        let probes = [
+            "com.apple.AppStore",
+            "com.apple.Notes",
+            "com.apple.MobileSMS",
+            "com.apple.Safari",
+            "com.apple.weather",
+        ]
+        for bundle in probes {
+            let dataPath = containers + "/" + bundle + "/Data"
+            if fm.fileExists(atPath: dataPath) {
+                let kids = (try? fm.contentsOfDirectory(atPath: dataPath)) ?? []
+                if !kids.isEmpty { return true }
+            }
+        }
+        return false
+    }
 }

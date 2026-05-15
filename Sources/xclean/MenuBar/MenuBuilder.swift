@@ -42,6 +42,7 @@ final class MenuBuilder: NSObject {
         let onClearProjects: () -> Void
         let onToggleAutoReclaim: () -> Void
         let onGrantFDA: () -> Void
+        let onGrantAppManagement: () -> Void
         let onEnterLicense: () -> Void
         let onDeactivateLicense: () -> Void
     }
@@ -507,6 +508,19 @@ final class MenuBuilder: NSObject {
             : "Required to Move sandboxed folders (Docker, etc.) to Trash."
         menu.addItem(fda)
 
+        let hasAppMgmt = RuntimeProbe.hasAppManagementAccess()
+        let appMgmt = NSMenuItem(
+            title: hasAppMgmt ? "App Management  ✓" : "Grant App Management…",
+            action: #selector(handleGrantAppManagement(_:)),
+            keyEquivalent: ""
+        )
+        appMgmt.target = self
+        appMgmt.state = hasAppMgmt ? .on : .off
+        appMgmt.toolTip = hasAppMgmt
+            ? "xclean can read other apps' containers (Docker, WhatsApp, …) without macOS prompts."
+            : "Stops the recurring \"xclean would like to access data from other apps\" prompt."
+        menu.addItem(appMgmt)
+
         menu.addItem(.separator())
         appendLicenseItems(to: menu)
 
@@ -601,6 +615,7 @@ final class MenuBuilder: NSObject {
     @objc private func handleClearProjects(_ sender: NSMenuItem) { callbacks?.onClearProjects() }
     @objc private func handleToggleAutoReclaim(_ sender: NSMenuItem) { callbacks?.onToggleAutoReclaim() }
     @objc private func handleGrantFDA(_ sender: NSMenuItem) { callbacks?.onGrantFDA() }
+    @objc private func handleGrantAppManagement(_ sender: NSMenuItem) { callbacks?.onGrantAppManagement() }
     @objc private func handleEnterLicense(_ sender: NSMenuItem) { callbacks?.onEnterLicense() }
     @objc private func handleDeactivateLicense(_ sender: NSMenuItem) { callbacks?.onDeactivateLicense() }
 

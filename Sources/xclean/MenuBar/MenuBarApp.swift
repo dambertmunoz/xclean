@@ -184,6 +184,7 @@ final class MenuBarAppDelegate: NSObject, NSApplicationDelegate {
             onClearProjects: { [weak self] in self?.clearProjects() },
             onToggleAutoReclaim: { [weak self] in self?.toggleAutoReclaim() },
             onGrantFDA: { [weak self] in self?.grantFullDiskAccess() },
+            onGrantAppManagement: { [weak self] in self?.grantAppManagement() },
             onEnterLicense: { [weak self] in self?.openLicenseKeyEntry() },
             onDeactivateLicense: { [weak self] in self?.deactivateLicense() }
         )
@@ -803,6 +804,52 @@ final class MenuBarAppDelegate: NSObject, NSApplicationDelegate {
         let url = URL(string: "x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?Privacy_AllFiles")
             ?? URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles")!
         NSWorkspace.shared.open(url)
+    }
+
+    /// Open System Settings directly on the App Management pane (Sonoma+).
+    private func openAppManagementSettings() {
+        let url = URL(string: "x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?Privacy_AppBundles")
+            ?? URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_AppBundles")!
+        NSWorkspace.shared.open(url)
+    }
+
+    /// Mirrors `grantFullDiskAccess`: opens both the App Management settings
+    /// pane and Finder showing /Applications/xclean.app so the user can drag
+    /// the app icon straight into the toggle list. Shows a step-by-step
+    /// alert with a "Reopen both windows" retry button.
+    private func grantAppManagement() {
+        if RuntimeProbe.hasAppManagementAccess() {
+            activateForModal()
+            let ok = NSAlert()
+            ok.messageText = "App Management already granted"
+            ok.informativeText = "xclean can already read other apps' containers (Docker, WhatsApp, etc.) without the macOS prompt."
+            ok.alertStyle = .informational
+            ok.addButton(withTitle: "OK")
+            _ = ok.runModal()
+            return
+        }
+
+        let appURL = URL(fileURLWithPath: "/Applications/xclean.app")
+        if FileManager.default.fileExists(atPath: appURL.path) {
+            NSWorkspace.shared.activateFileViewerSelecting([appURL])
+        }
+        openAppManagementSettings()
+
+        activateForModal()
+        let alert = NSAlert()
+        alert.messageText = "Grant App Management to xclean"
+        alert.informativeText =
+            "I opened two windows for you:\n\n"
+            + "  1. System Settings → Privacy & Security → App Management\n"
+            + "  2. Finder showing /Applications/xclean.app\n\n"
+            + "Drag xclean.app from Finder into the App Management list and turn the switch on.\n"
+            + "This is separate from Full Disk Access and stops the recurring \"access data from other apps\" prompts."
+        alert.alertStyle = .informational
+        alert.addButton(withTitle: "Got it")
+        alert.addButton(withTitle: "Reopen both windows")
+        if alert.runModal() == .alertSecondButtonReturn {
+            grantAppManagement()
+        }
     }
 
     /// Translates raw stderr into something a human can act on. We keep
