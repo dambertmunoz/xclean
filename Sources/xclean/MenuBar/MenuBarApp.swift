@@ -394,17 +394,32 @@ final class MenuBarAppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func openLicenseKeyEntry() {
-        activateForModal()
+        // LSUIElement apps don't grab keyboard focus by default. Bump the
+        // policy to .regular for the duration of the modal so the alert's
+        // window becomes key and ⌘V actually targets the text field, then
+        // restore .accessory so the app remains a menu-bar-only resident.
+        let previousPolicy = NSApp.activationPolicy()
+        NSApp.setActivationPolicy(.regular)
+        NSApp.activate(ignoringOtherApps: true)
+        defer { NSApp.setActivationPolicy(previousPolicy) }
+
         let alert = NSAlert()
         alert.messageText = "Activate xclean"
         alert.informativeText = "Paste your license key. One Mac per key."
         alert.alertStyle = .informational
-        let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 320, height: 22))
+        let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 320, height: 24))
         field.placeholderString = "XCL-AAAA-BBBB-CCCC-DDDD"
+        field.isEditable = true
+        field.isSelectable = true
+        field.usesSingleLineMode = true
+        field.font = NSFont.monospacedSystemFont(ofSize: 13, weight: .regular)
         alert.accessoryView = field
         alert.addButton(withTitle: "Activate")
         alert.addButton(withTitle: "Cancel")
-        field.becomeFirstResponder()
+        // Sets focus correctly — `becomeFirstResponder` before runModal()
+        // is a no-op because the field has no window yet.
+        alert.window.initialFirstResponder = field
+
         guard alert.runModal() == .alertFirstButtonReturn else { return }
         let key = field.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
         Task { [weak self] in
