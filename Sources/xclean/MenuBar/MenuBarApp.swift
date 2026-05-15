@@ -40,11 +40,48 @@ final class MenuBarAppDelegate: NSObject, NSApplicationDelegate {
     // MARK: - lifecycle
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        installEditMenu()
         configureStatusItem()
         configureIndexer()
         configureSystemEvents()
         ThresholdNotifier.requestAuthorizationIfNeeded()
         rebuildMenu()
+    }
+
+    /// LSUIElement apps inherit no main menu, which means ⌘C / ⌘V never
+    /// reach NSTextField inside an NSAlert accessory view — the responder
+    /// chain has no "Paste" action to dispatch. Installing a hidden Edit
+    /// submenu fixes pasting in every modal we ever show. The submenu
+    /// title is "Edit" but it's never visible because LSUIElement apps
+    /// don't render a system menu bar.
+    private func installEditMenu() {
+        guard NSApp.mainMenu == nil else { return }
+
+        let mainMenu = NSMenu()
+
+        let appItem = NSMenuItem()
+        let appMenu = NSMenu()
+        appMenu.addItem(withTitle: "Quit xclean",
+                        action: #selector(NSApplication.terminate(_:)),
+                        keyEquivalent: "q")
+        appItem.submenu = appMenu
+        mainMenu.addItem(appItem)
+
+        let editItem = NSMenuItem()
+        let editMenu = NSMenu(title: "Edit")
+        let actions: [(String, Selector, String)] = [
+            ("Cut",        #selector(NSText.cut(_:)),       "x"),
+            ("Copy",       #selector(NSText.copy(_:)),      "c"),
+            ("Paste",      #selector(NSText.paste(_:)),     "v"),
+            ("Select All", #selector(NSText.selectAll(_:)), "a"),
+        ]
+        for (title, sel, keq) in actions {
+            editMenu.addItem(withTitle: title, action: sel, keyEquivalent: keq)
+        }
+        editItem.submenu = editMenu
+        mainMenu.addItem(editItem)
+
+        NSApp.mainMenu = mainMenu
     }
 
     private func configureSystemEvents() {
